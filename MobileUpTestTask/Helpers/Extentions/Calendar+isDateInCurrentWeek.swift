@@ -14,8 +14,4 @@ extension Calendar {
         guard let currentWeekOfYear = currentComponents.weekOfYear, let dateWeekOfYear = dateComponents.weekOfYear else { return nil }
         return currentWeekOfYear == dateWeekOfYear
     }
-    
-    func get(_ component: Calendar.Component, from date: Date) -> Int {
-        return Calendar.current.component(component, from: date)
-    }
 }

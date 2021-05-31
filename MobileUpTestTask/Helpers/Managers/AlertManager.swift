@@ -17,7 +17,6 @@ class AlertManager {
         let close = UIAlertAction(title: closeTitle, style: .cancel) { (_) in
             result.onCompleted()
         }
-
         alertVC.addAction(close)
         show(alertVC)
         return result

@@ -23,7 +23,46 @@ class MessageService: MessageServiceProtocol {
 
         URLSession.shared.rx
             .response(request: URLRequest(url: url))
-            .bind(to: fetchBinder())
+            .subscribe(onNext: { [unowned self] response, data in
+                guard response.statusCode < 400 else {
+                    DispatchQueue.main.async {
+                        AlertManager.showCloseActionAlert(title: "No connection to server.", message: "Please, try again later.")
+                    }
+                    return
+                }
+                guard let model = try? JSONDecoder().decode([MessageResponceModel].self, from: data) else { return }
+                if model.isEmpty { self.result.accept(nil); return }
+                
+                var users = [MessageModel]()
+                let group = DispatchGroup()
+                
+                DispatchQueue.global(qos: .userInitiated).async {
+                    model.enumerated().forEach { index, user in
+                        group.enter()
+                        guard var image = UIImage(named: "Default Profile Icon") else { fatalError("Wrong default image name") }
+                        if let stringURL = user.user.avatar_url,
+                           let url = URL(string: stringURL),
+                           let data = try? Data(contentsOf: url),
+                           let img = UIImage(data: data) {
+                                image = img
+                        }
+                        group.leave()
+                        group.notify(queue: .main) {
+                            users += [MessageModel(name: user.user.nickname,
+                                                   icon: image,
+                                                   lastMessage: user.message.text,
+                                                   date: self.formateDate(user.message.receiving_date) ?? "")]
+                            if index == model.count - 1 {
+                                self.result.accept(users)
+                            }
+                        }
+                    }
+                }
+            }, onError: { error in
+                DispatchQueue.main.async {
+                    AlertManager.showCloseActionAlert(title: "Error", message: "\(error.localizedDescription)")
+                }
+            })
             .disposed(by: bag)
         
         return result.skip(1)
@@ -46,44 +85,5 @@ class MessageService: MessageServiceProtocol {
             }
         }
         return nil
-    }
-    
-    //MARK: - Binders
-    private func fetchBinder() -> Binder<(response: HTTPURLResponse, data: Data)> {
-        Binder(self) { service, input in
-            guard input.response.statusCode < 400 else {
-                AlertManager.showCloseActionAlert(title: "No connection to server.", message: "Please, try again later.")
-                return
-            }
-            guard let model = try? JSONDecoder().decode([MessageResponceModel].self, from: input.data) else { return }
-            if model.isEmpty { service.result.accept([]); return }
-            
-            var users = [MessageModel]()
-            let group = DispatchGroup()
-            
-            DispatchQueue.global(qos: .userInitiated).async {
-                model.enumerated().forEach { index, user in
-                    group.enter()
-                    guard var image = UIImage(named: "Default Profile Icon") else { fatalError("Wrong default image name") }
-                    if let stringURL = user.user.avatar_url,
-                       let url = URL(string: stringURL),
-                       let data = try? Data(contentsOf: url),
-                       let img = UIImage(data: data) {
-                            image = img
-                    }
-                    group.leave()
-                    group.notify(queue: .main) {
-                        users += [MessageModel(name: user.user.nickname,
-                                               icon: image,
-                                               lastMessage: user.message.text,
-                                               date: service.formateDate(user.message.receiving_date) ?? "")]
-                        
-                        if index == model.count - 1 {
-                            service.result.accept(users)
-                        }
-                    }
-                }
-            }
-        }
     }
 }

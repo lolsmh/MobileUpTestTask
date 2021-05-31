@@ -49,6 +49,7 @@ class MessagesViewModel: MessagesViewModelProtocol {
             vm.isLoading.accept(true)
             vm.service
                 .fetchMessages()
+                .map({ vm.isLoading.accept(false); return $0 ?? [] })
                 .bind(to: vm.refreshTableView)
                 .disposed(by: vm.bag)
         }

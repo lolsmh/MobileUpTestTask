@@ -8,6 +8,7 @@
 import UIKit
 import RxSwift
 import RxCocoa
+import Network
 
 class MessagesViewController: UIViewController {
     //MARK: - Outltes
@@ -21,12 +22,14 @@ class MessagesViewController: UIViewController {
     private let bag = DisposeBag()
     private var viewModel: MessagesViewModelProtocol!
     private var messages = [MessageModel]()
+    private let monitor = NWPathMonitor()
+    private let monitorQueue = DispatchQueue(label: "NWMonitor")
     
     //MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
-        checkConnection()
         configure()
+        configureConnectionMonitor()
         configureMessagesTableView()
         bindViewModel()
         bindRefreshControl()
@@ -39,6 +42,7 @@ class MessagesViewController: UIViewController {
         viewModel = MessagesViewModel()
         let appearance = UINavigationBarAppearance()
         appearance.backgroundColor = .systemGray6
+        appearance.shadowColor = .clear
         navigationController?.navigationBar.standardAppearance = appearance
         navigationController?.navigationBar.scrollEdgeAppearance = appearance
     }
@@ -48,13 +52,26 @@ class MessagesViewController: UIViewController {
         messagesTableView.refreshControl = refreshControl
         messagesTableView.dataSource = self
         messagesTableView.delegate = self
+        
+    }
+    
+    private func configureConnectionMonitor() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            if path.status == .satisfied {
+                self?.viewModel.input.fetchData.accept(())
+            } else {
+                DispatchQueue.main.async {
+                    AlertManager.showCloseActionAlert(title: "No internet connection")
+                }
+            }
+        }
+        monitor.start(queue: monitorQueue)
     }
     
     //MARK: - Binding
     private func bindViewModel() {
         viewModel.output.refreshTableView.drive { messages in
             guard let messages = messages else { return }
-            self.viewModel.output.isLoading.accept(false)
             self.messages = messages
             self.refreshControl.endRefreshing()
             self.messagesTableView.reloadData()
@@ -79,12 +96,6 @@ class MessagesViewController: UIViewController {
             .filter { _ in self.refreshControl.isRefreshing }
             .bind(to: viewModel.input.fetchData)
             .disposed(by: bag)
-    }
-    
-    private func checkConnection() {
-        if !ConnectionCheckManager.isConnectedToNetwork() {
-            AlertManager.showCloseActionAlert(title: "No internet connection")
-        }
     }
 }
 
@@ -118,5 +129,5 @@ extension MessagesViewController: UITableViewDataSource {
 
 //MARK: - Table View Delegate
 extension MessagesViewController: UITableViewDelegate {
-    func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat { 80 }
+    func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat { 85 }
 }
